@@ -1,3 +1,7 @@
+# Author: Connor Fair
+# Class:  CMSC 437 Intro to Natural Language Processing
+# Date:   2-22-26
+
 import sys
 import re
 from collections import Counter
@@ -36,6 +40,10 @@ def clean_document(document: str) -> str:
     document = document.replace("Mr <end>",  "Mr.")
     document = document.replace("Ms <end>",  "Ms.")
     document = document.replace("Mrs <end>", "Mrs.")
+    # remove all extra punctuation
+    document = re.sub(r"[,'\"()]", "", document)
+    # remove capitalization
+    document = document.lower()
     # make sure the last characters in the document are an <end> tag
     if document[-6:] != " <end>":
         # remove the period at the end if there is one
@@ -55,24 +63,17 @@ def create_tables(n: int, documents: list[str]) -> list:
     all_docs = " ".join(documents)
     tables = []
     for i in range(1,n+1):
-        tables.append(create_table(i, all_docs, tables))
+        tables.append(create_table(i, all_docs))
     return tables
 
-def create_table(n: int,  all_docs: str, tables: list) -> dict:
+def create_table(n: int,  all_docs: str) -> dict:
     """Creates a table for n based on all_docs."""
     all_words = all_docs.split(" ")
-    # TODO make a sliding window that concatinates words into n-sequences to be processed
+    # a sliding window that concatinates words into n-sequences to be processed
+    if n > 1:
+        all_words = [" ".join(all_words[i:i+n]) for i in range(len(all_words) - n)]
 
     n_gram_frequencies = dict(Counter(all_words))
-    # converting to probabilities maybe unessisary 
-    """# convert word frequencies into probabilities based on the previous n-1_gram table
-    if n == 1:
-        # specal case for unigrams
-        word_count = len(all_words)
-        for key, value in n_gram_frequencies.items():
-            n_gram_frequencies[key] = n_gram_frequencies[key]/word_count
-    else:
-        pass"""
     return n_gram_frequencies
 
 def generate_sentence(tables: list[dict]) -> str:
@@ -81,7 +82,7 @@ def generate_sentence(tables: list[dict]) -> str:
     next_word = ""
     while next_word != "<end>":
         next_word = get_next_word(tables, sentence)
-        # reroll word choice if <start was chossen>
+        # reroll word choice if <start> was chosen
         if next_word == "<start>":
             continue
         sentence += " " + next_word
@@ -94,12 +95,23 @@ def generate_sentence(tables: list[dict]) -> str:
 def get_next_word(tables: list[dict], sentence: str) -> str:
     """Gets the next word based on the current sentence."""
     # unigrams don't care about context, so just grab a word
-    if len(tables) == 1:
+    n = len(tables)
+    if n == 1:
         uni_table = tables[0]
         return random.choices(list(uni_table.keys()), weights=list(uni_table.values()))[0]
     else:
-        print("Bad ending, lol")
-        return "<end>"
+        # gets the previous n-1 grams fro the sentence
+        sentence_words = sentence.split(" ")[-n+1:]
+        table = tables[len(sentence_words)]
+        # filter down the table keys to just the ones that start with our n-1 grams
+        prev_grams = " ".join(sentence_words) + " "
+        filtered_keys = [key for key in table.keys() if key.startswith(prev_grams)]
+        #print(prev_grams)
+        weights = [table[key] for key in filtered_keys]
+        # pick the next n words based on the previous n-1 words weighted by their frequencies
+        next_sequence = random.choices(filtered_keys, weights=weights)[0]
+        # return the last word
+        return next_sequence.split(" ")[-1]
 
 def main(arguments: list):
     n, m, files = verify_args(arguments)
@@ -113,9 +125,6 @@ def main(arguments: list):
     # print a sentence for each m
     for s in range(m):
         print(generate_sentence(tables))
-    
-    print("Hello from n-grams!")
-
 
 
 if __name__ == "__main__":
